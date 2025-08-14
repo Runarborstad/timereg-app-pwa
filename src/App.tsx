@@ -311,11 +311,11 @@ function TimerCard({ running, onStart, onStop, projects }: {
           </datalist>
         </div>
         <div className="flex-1 min-w-40">
-          <label className="text-sm">Ordrenr (valgfritt)</label>
+          <label className="text-sm">Ordrenr</label>
           <input className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Skriv eller velg ordrenr" />
         </div>
         <div className="flex-[2] min-w-60">
-          <label className="text-sm">Notater (valgfritt)</label>
+          <label className="text-sm">Notater</label>
           <input className="w-full border rounded-xl px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="ml-auto text-center">
