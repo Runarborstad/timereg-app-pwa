@@ -1,36 +1,67 @@
-
 import React, { useEffect, useMemo, useState } from "react";
+import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
-// PWA timeregistrering – med XLSX-eksport
+/**
+ * Timeregistrering – PWA med Supabase skylagring
+ * - Innlogging via e-post (magic link)
+ * - Hvis innlogget: henter/lagrer timer i Supabase (per bruker)
+ * - Hvis ikke innlogget: alt lagres lokalt (localStorage)
+ * - Eksport til Excel (.xlsx)
+ *
+ * Feltnavn i UI:
+ *  - project  => "Arbeidssted"
+ *  - activity => "Ordrenr"
+ */
+
+type Entry = {
+  id: string;
+  date: string;     // ISO yyyy-mm-dd
+  project: string;  // Arbeidssted
+  activity?: string; // Ordrenr
+  notes?: string;
+  start?: string;   // HH:mm
+  end?: string;     // HH:mm
+  minutes: number;
+  createdAt: number; // client-side ts (brukes lokalt)
+};
+
+type DbRow = {
+  id: string;
+  user_id: string;
+  date: string;     // 'YYYY-MM-DD' (date)
+  project: string;
+  activity: string | null;
+  notes: string | null;
+  start: string | null; // 'HH:MM:SS'
+  end: string | null;   // 'HH:MM:SS'
+  minutes: number;
+  created_at: string;
+};
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+const supabase: SupabaseClient | null =
+  SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
 export default function TimeTrackerApp() {
-  type Entry = {
-    id: string;
-    date: string; // ISO yyyy-mm-dd
-    project: string;
-    activity?: string;
-    notes?: string;
-    start?: string;
-    end?: string;
-    minutes: number;
-    createdAt: number;
-  };
-
-  type RunningTimer = {
-    id: string;
-    project: string;
-    activity?: string;
-    notes?: string;
-    startTs: number;
-  } | null;
-
   const [entries, setEntries] = useState<Entry[]>(() => loadEntries());
   const [projects, setProjects] = useState<string[]>(() => loadProjects());
-  const [running, setRunning] = useState<RunningTimer>(() => loadTimer());
-  const [filterDate, setFilterDate] = useState<string>(() => todayISO());
+  const [running, setRunning] = useState<{ id: string; project: string; activity?: string; notes?: string; startTs: number } | null>(() => loadTimer());
+
   const [view, setView] = useState<"day" | "week" | "all">("day");
+  const [filterDate, setFilterDate] = useState<string>(() => todayISO());
+
+  // Auth
+  const [session, setSession] = useState<Session | null>(null);
+  const [email, setEmail] = useState<string>("");
+  const loggedIn = !!session?.user;
+
+  // re-render klokke mens timer kjører
   useInterval(running ? 1000 : null);
 
+  // Persist local state
   useEffect(() => { localStorage.setItem("tt_entries", JSON.stringify(entries)); }, [entries]);
   useEffect(() => { localStorage.setItem("tt_projects", JSON.stringify(projects)); }, [projects]);
   useEffect(() => {
@@ -38,17 +69,65 @@ export default function TimeTrackerApp() {
     else localStorage.removeItem("tt_running");
   }, [running]);
 
+  // Init Supabase session & subscription
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+
+    return () => { sub?.subscription?.unsubscribe(); };
+  }, []);
+
+  // Når vi logger inn: hent sky-data og slå sammen med lokal cache (enkel strategi: sky vinner)
+  useEffect(() => {
+    if (!supabase || !loggedIn) return;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("time_entries")
+        .select("*")
+        .order("date", { ascending: false })
+        .limit(2000);
+
+      if (error) {
+        console.warn("Kunne ikke hente data fra Supabase:", error.message);
+        return;
+      }
+
+      const rows = (data ?? []) as DbRow[];
+      const mapped: Entry[] = rows.map(row => ({
+        id: row.id,
+        date: row.date,
+        project: row.project,
+        activity: row.activity ?? "",
+        notes: row.notes ?? "",
+        start: (row.start ?? "").slice(0, 5) || "",
+        end: (row.end ?? "").slice(0, 5) || "",
+        minutes: row.minutes,
+        createdAt: new Date(row.created_at).getTime(),
+      }));
+
+      setEntries(mapped);
+      // Oppdater forslag til arbeidssteder
+      const uniqueProjects = Array.from(new Set(mapped.map(e => e.project))).sort((a, b) => a.localeCompare(b));
+      setProjects(uniqueProjects);
+    })();
+  }, [loggedIn]);
+
+  // Avledede data
   const filtered = useMemo(() => filterEntries(entries, view, filterDate), [entries, view, filterDate]);
   const totals = useMemo(() => sumMinutesByDate(filtered), [filtered]);
   const grandTotal = useMemo(() => filtered.reduce((a, e) => a + e.minutes, 0), [filtered]);
 
+  // ---- UI handlers ----
   function addProject(name: string) {
-    const n = name.trim();
+    const n = (name ?? "").trim();
     if (!n) return;
     if (!projects.includes(n)) setProjects([...projects, n].sort((a, b) => a.localeCompare(b)));
   }
 
-  function addManualEntry(data: Partial<Entry>) {
+  async function addManualEntry(data: Partial<Entry>) {
     const id = cryptoRandomId();
     const date = data.date || todayISO();
     const project = (data.project || "").trim();
@@ -65,22 +144,50 @@ export default function TimeTrackerApp() {
     if (!minutes) return alert("Oppgi varighet eller start/slutt");
 
     const entry: Entry = {
-      id, date, project,
+      id,
+      date,
+      project,
       activity: data.activity?.trim() || "",
       notes: data.notes?.trim() || "",
-      start: start || "", end: end || "",
-      minutes, createdAt: Date.now(),
+      start: start || "",
+      end: end || "",
+      minutes,
+      createdAt: Date.now(),
     };
-    setEntries((prev) => [entry, ...prev]);
+
+    setEntries(prev => [entry, ...prev]);
     addProject(project);
+
+    // sky-lagring hvis innlogget
+    if (supabase && loggedIn && session?.user) {
+      const payload = toDbRow(entry, session.user.id);
+      const { error } = await supabase.from("time_entries").insert(payload);
+      if (error) console.warn("Kunne ikke lagre til sky:", error.message);
+    }
   }
 
-  function deleteEntry(id: string) {
-    setEntries((prev) => prev.filter((e) => e.id !== id));
+  async function deleteEntry(id: string) {
+    setEntries(prev => prev.filter(e => e.id !== id));
+
+    if (supabase && loggedIn) {
+      const { error } = await supabase.from("time_entries").delete().eq("id", id);
+      if (error) console.warn("Sletting i sky feilet:", error.message);
+    }
   }
 
-  function updateEntry(id: string, patch: Partial<Entry>) {
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  async function updateEntry(id: string, patch: Partial<Entry>) {
+    setEntries(prev => prev.map(e => (e.id === id ? { ...e, ...patch } : e)));
+
+    if (supabase && loggedIn) {
+      // Finn ny versjon i minnet
+      const after = entries.find(e => e.id === id);
+      const merged: Entry | undefined = after ? { ...after, ...patch } : undefined;
+      if (!merged || !session?.user) return;
+
+      const payload = toDbUpdate(merged);
+      const { error } = await supabase.from("time_entries").update(payload).eq("id", id);
+      if (error) console.warn("Oppdatering i sky feilet:", error.message);
+    }
   }
 
   function startTimer(project: string, activity?: string, notes?: string) {
@@ -90,7 +197,7 @@ export default function TimeTrackerApp() {
     addProject(project.trim());
   }
 
-  function stopTimer() {
+  async function stopTimer() {
     if (!running) return;
     const start = running.startTs;
     const end = Date.now();
@@ -107,17 +214,38 @@ export default function TimeTrackerApp() {
       minutes,
       createdAt: Date.now(),
     };
-    setEntries((prev) => [entry, ...prev]);
+    setEntries(prev => [entry, ...prev]);
     setRunning(null);
+
+    if (supabase && loggedIn && session?.user) {
+      const payload = toDbRow(entry, session.user.id);
+      const { error } = await supabase.from("time_entries").insert(payload);
+      if (error) console.warn("Kunne ikke lagre stoppet timer til sky:", error.message);
+    }
   }
 
   function clearAll() {
-    if (!confirm("Slette alle registreringer? Dette kan ikke angres.")) return;
+    if (!confirm("Slette alle registreringer lokalt? (Skydata påvirkes ikke)")) return;
     setEntries([]);
     setRunning(null);
   }
 
-  // ---------- XLSX Export ----------
+  // ---- Auth ----
+  async function sendMagicLink() {
+    if (!supabase) return alert("Supabase er ikke konfigurert.");
+    if (!email.trim()) return alert("Skriv inn e‑postadresse");
+
+    const { error } = await supabase.auth.signInWithOtp({ email: email.trim(), options: { emailRedirectTo: window.location.origin } });
+    if (error) return alert("Kunne ikke sende innloggingslenke: " + error.message);
+    alert("Sjekk e‑posten din for innloggingslenke.");
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+  }
+
+  // ---- Export XLSX ----
   function exportXLSX() {
     const header = ["Dato", "Arbeidssted", "Ordrenr", "Notater", "Start", "Slutt", "Minutter", "Timer"];
     const rows = [
@@ -135,18 +263,10 @@ export default function TimeTrackerApp() {
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(rows);
-    const wscols = [
-      { wch: 12 }, // Dato
-      { wch: 24 }, // Arbeidssted
-      { wch: 14 }, // Ordrenr
-      { wch: 40 }, // Notater
-      { wch: 8 },  // Start
-      { wch: 8 },  // Slutt
-      { wch: 10 }, // Minutter
-      { wch: 10 }, // Timer
+    (ws as any)["!cols"] = [
+      { wch: 12 }, { wch: 24 }, { wch: 14 }, { wch: 40 },
+      { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
     ];
-    (ws as any)["!cols"] = wscols;
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Timer");
     const filename = `timeregistrering-${new Date().toISOString().slice(0, 10)}.xlsx`;
@@ -156,11 +276,35 @@ export default function TimeTrackerApp() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Timeregistrering</h1>
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-1">
+            <h1 className="text-2xl font-bold">Timeregistrering</h1>
+
+            {/* Auth UI */}
+            {!loggedIn ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  className="border rounded-xl px-3 py-2"
+                  placeholder="E‑post for skylagring"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <button onClick={sendMagicLink} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-gray-50">
+                  Send innloggingslenke
+                </button>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600 flex items-center gap-2">
+                Innlogget som <span className="font-medium">{session!.user.email}</span>
+                <button onClick={signOut} className="px-2 py-1 rounded-lg border hover:bg-gray-50">Logg ut</button>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <button onClick={exportXLSX} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-gray-50">Eksporter Excel</button>
-            <button onClick={clearAll} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-red-50">Tøm alt</button>
+            <button onClick={clearAll} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-red-50">Tøm lokalt</button>
           </div>
         </div>
       </header>
@@ -273,7 +417,7 @@ export default function TimeTrackerApp() {
   );
 }
 
-// ------------- TimerCard -------------
+/* ---------------- TimerCard ---------------- */
 function TimerCard({ running, onStart, onStop, projects }: {
   running: { id: string; project: string; activity?: string; notes?: string; startTs: number } | null;
   onStart: (project: string, activity?: string, notes?: string) => void;
@@ -311,11 +455,11 @@ function TimerCard({ running, onStart, onStop, projects }: {
           </datalist>
         </div>
         <div className="flex-1 min-w-40">
-          <label className="text-sm">Ordrenr</label>
+          <label className="text-sm">Ordrenr (valgfritt)</label>
           <input className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Skriv eller velg ordrenr" />
         </div>
         <div className="flex-[2] min-w-60">
-          <label className="text-sm">Notater</label>
+          <label className="text-sm">Notater (valgfritt)</label>
           <input className="w-full border rounded-xl px-3 py-2" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         <div className="ml-auto text-center">
@@ -336,7 +480,7 @@ function TimerCard({ running, onStart, onStop, projects }: {
   );
 }
 
-// ------------- ManualEntryCard -------------
+/* -------------- ManualEntryCard -------------- */
 function ManualEntryCard({ projects, onAdd, onCreateProject }: {
   projects: string[];
   onAdd: (data: any) => void;
@@ -384,7 +528,15 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
         </div>
         <div>
           <label className="text-sm">Minutter</label>
-          <input type="number" min={0} step={5} className="w-full border rounded-xl px-3 py-2" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} placeholder="eller beregnes fra start/slutt" />
+          <input
+            type="number"
+            min={0}
+            step={5}
+            className="w-full border rounded-xl px-3 py-2"
+            value={minutes}
+            onChange={(e) => setMinutes(Number(e.target.value))}
+            placeholder="eller beregnes fra start/slutt"
+          />
         </div>
         <div className="lg:col-span-6 flex items-center gap-2">
           <button onClick={() => onAdd({ date, project, activity, notes, start, end, minutes })} className="px-4 py-2 rounded-2xl shadow-sm border bg-blue-600 text-white hover:opacity-90">
@@ -399,7 +551,7 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
   );
 }
 
-// ------------- Hooks & Utils -------------
+/* ---------------- Utils ---------------- */
 function useInterval(delay: number | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -504,4 +656,33 @@ function cryptoRandomId() {
   // @ts-ignore
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return (crypto as any).randomUUID();
   return Math.random().toString(36).slice(2);
+}
+
+function toDbRow(e: Entry, userId: string) {
+  // Konverterer Entry til rad for INSERT
+  return {
+    id: e.id,
+    user_id: userId,
+    date: e.date, // 'YYYY-MM-DD'
+    project: e.project,
+    activity: e.activity || null,
+    notes: e.notes || null,
+    start: e.start ? `${e.start}:00` : null,
+    end: e.end ? `${e.end}:00` : null,
+    minutes: e.minutes,
+    created_at: new Date(e.createdAt).toISOString(),
+  };
+}
+
+function toDbUpdate(e: Entry) {
+  // Felt for UPDATE (uten user_id/id)
+  return {
+    date: e.date,
+    project: e.project,
+    activity: e.activity || null,
+    notes: e.notes || null,
+    start: e.start ? `${e.start}:00` : null,
+    end: e.end ? `${e.end}:00` : null,
+    minutes: e.minutes,
+  };
 }
