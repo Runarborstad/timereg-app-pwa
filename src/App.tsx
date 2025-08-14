@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
 
+import React, { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+
+// PWA timeregistrering – med XLSX-eksport
 export default function TimeTrackerApp() {
   type Entry = {
     id: string;
-    date: string;
+    date: string; // ISO yyyy-mm-dd
     project: string;
     activity?: string;
     notes?: string;
@@ -114,16 +117,40 @@ export default function TimeTrackerApp() {
     setRunning(null);
   }
 
-  function exportCSV() {
+  // ---------- XLSX Export ----------
+  function exportXLSX() {
+    const header = ["Dato", "Arbeidssted", "Ordrenr", "Notater", "Start", "Slutt", "Minutter", "Timer"];
     const rows = [
-      ["Dato", "Arbeidssted", "Ordrenr", "Notater", "Start", "Slutt", "Minutter", "Timer"],
+      header,
       ...entries.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => [
-        e.date, e.project, e.activity || "", (e.notes || "").replaceAll("\\n", " "), e.start || "", e.end || "",
-        String(e.minutes), (e.minutes / 60).toFixed(2),
+        e.date,
+        e.project,
+        e.activity || "",
+        (e.notes || "").replace(/\r?\n/g, " "),
+        e.start || "",
+        e.end || "",
+        e.minutes,
+        (e.minutes / 60).toFixed(2),
       ]),
     ];
-    const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\\n");
-    downloadFile(`timeregistrering-${new Date().toISOString().slice(0, 10)}.csv`, csv, "text/csv");
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wscols = [
+      { wch: 12 }, // Dato
+      { wch: 24 }, // Arbeidssted
+      { wch: 14 }, // Ordrenr
+      { wch: 40 }, // Notater
+      { wch: 8 },  // Start
+      { wch: 8 },  // Slutt
+      { wch: 10 }, // Minutter
+      { wch: 10 }, // Timer
+    ];
+    (ws as any)["!cols"] = wscols;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Timer");
+    const filename = `timeregistrering-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
   }
 
   return (
@@ -132,7 +159,7 @@ export default function TimeTrackerApp() {
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <h1 className="text-2xl font-bold">Timeregistrering</h1>
           <div className="flex items-center gap-2">
-            <button onClick={exportCSV} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-gray-50">Eksporter CSV</button>
+            <button onClick={exportXLSX} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-gray-50">Eksporter Excel</button>
             <button onClick={clearAll} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-red-50">Tøm alt</button>
           </div>
         </div>
@@ -246,6 +273,7 @@ export default function TimeTrackerApp() {
   );
 }
 
+// ------------- TimerCard -------------
 function TimerCard({ running, onStart, onStop, projects }: {
   running: { id: string; project: string; activity?: string; notes?: string; startTs: number } | null;
   onStart: (project: string, activity?: string, notes?: string) => void;
@@ -283,8 +311,8 @@ function TimerCard({ running, onStart, onStop, projects }: {
           </datalist>
         </div>
         <div className="flex-1 min-w-40">
-          <label className="text-sm">Ordrenr</label>
-          <input className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} />
+          <label className="text-sm">Ordrenr (valgfritt)</label>
+          <input className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Skriv eller velg ordrenr" />
         </div>
         <div className="flex-[2] min-w-60">
           <label className="text-sm">Notater (valgfritt)</label>
@@ -308,6 +336,7 @@ function TimerCard({ running, onStart, onStop, projects }: {
   );
 }
 
+// ------------- ManualEntryCard -------------
 function ManualEntryCard({ projects, onAdd, onCreateProject }: {
   projects: string[];
   onAdd: (data: any) => void;
@@ -333,11 +362,11 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
         </div>
         <div>
           <label className="text-sm">Arbeidssted</label>
-          <input type="text" className="w-full border rounded-xl px-3 py-2" value={project} onChange={(e) => setProject(e.target.value)} list="project-list" placeholder="Skriv eller velg" />
+          <input type="text" className="w-full border rounded-xl px-3 py-2" value={project} onChange={(e) => setProject(e.target.value)} list="project-list" placeholder="Skriv eller velg arbeidssted" />
         </div>
         <div>
           <label className="text-sm">Ordrenr</label>
-          <input type="text" className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} />
+          <input type="text" className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} placeholder="Skriv eller velg ordrenr" />
         </div>
         <div className="lg:col-span-2">
           <label className="text-sm">Notater</label>
@@ -362,7 +391,7 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
             Legg til
           </button>
           <button onClick={() => onCreateProject(project)} className="px-3 py-2 rounded-2xl shadow-sm border hover:bg-gray-50">
-            Legg til nytt prosjekt
+            Legg til nytt arbeidssted
           </button>
         </div>
       </div>
@@ -370,6 +399,7 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
   );
 }
 
+// ------------- Hooks & Utils -------------
 function useInterval(delay: number | null) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -474,23 +504,4 @@ function cryptoRandomId() {
   // @ts-ignore
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return (crypto as any).randomUUID();
   return Math.random().toString(36).slice(2);
-}
-
-function csvEscape(s: string) {
-  // @ts-ignore
-  if (s == null) return "";
-  const needs = /[",\\n]/.test(s);
-  return needs ? '"' + s.replaceAll('"', '""') + '"' : s;
-}
-
-function downloadFile(name: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: mime + ";charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
