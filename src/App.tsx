@@ -456,5 +456,271 @@ function TableEditable({ entries, projects, onUpdate, onDelete }: {
         <tbody>
           {entries.map((e) => (
             <tr key={e.id} className="border-b hover:bg-gray-50">
-              <td className="py-2 pr-2"><input type="date" value={e.date} onChange={(ev) => onUpdate(e.id, { date: ev.target.value })} className="border rounded-lg px-2 py-1" /></td>
-              <td
+              <td className="py-2 pr-2">
+                <input
+                  type="date"
+                  value={e.date}
+                  onChange={(ev) => onUpdate(e.id, { date: ev.target.value })}
+                  className="border rounded-lg px-2 py-1"
+                />
+              </td>
+              <td className="py-2 pr-2">
+                <input
+                  type="text"
+                  value={e.project}
+                  onChange={(ev) => onUpdate(e.id, { project: ev.target.value })}
+                  className="border rounded-lg px-2 py-1 w-40"
+                  list="project-list"
+                />
+                <datalist id="project-list">
+                  {projects.map((p) => (
+                    <option value={p} key={p} />
+                  ))}
+                </datalist>
+              </td>
+              <td className="py-2 pr-2">
+                <input
+                  type="text"
+                  value={e.activity || ""}
+                  onChange={(ev) => onUpdate(e.id, { activity: ev.target.value })}
+                  className="border rounded-lg px-2 py-1 w-40"
+                />
+              </td>
+              <td className="py-2 pr-2">
+                <input
+                  type="text"
+                  value={e.notes || ""}
+                  onChange={(ev) => onUpdate(e.id, { notes: ev.target.value })}
+                  className="border rounded-lg px-2 py-1 w-64"
+                />
+              </td>
+              <td className="py-2 pr-2">
+                <input
+                  type="time"
+                  value={e.start || ""}
+                  onChange={(ev) => {
+                    const start = ev.target.value;
+                    const end = e.end;
+                    let minutes = e.minutes;
+                    if (start && end) minutes = diffMinutes(start, end);
+                    onUpdate(e.id, { start, minutes });
+                  }}
+                  className="border rounded-lg px-2 py-1 w-24"
+                />
+              </td>
+              <td className="py-2 pr-2">
+                <input
+                  type="time"
+                  value={e.end || ""}
+                  onChange={(ev) => {
+                    const end = ev.target.value;
+                    const start = e.start;
+                    let minutes = e.minutes;
+                    if (start && end) minutes = diffMinutes(start, end);
+                    onUpdate(e.id, { end, minutes });
+                  }}
+                  className="border rounded-lg px-2 py-1 w-24"
+                />
+              </td>
+              <td className="py-2 pr-2 text-right">
+                <input
+                  type="number"
+                  value={e.minutes}
+                  min={0}
+                  step={5}
+                  onChange={(ev) => onUpdate(e.id, { minutes: Number(ev.target.value) })}
+                  className="border rounded-lg px-2 py-1 w-20 text-right"
+                />
+              </td>
+              <td className="py-2 pr-2 text-right">{(e.minutes / 60).toFixed(2)}</td>
+              <td className="py-2 pr-2 text-right">
+                <button
+                  onClick={() => onDelete(e.id)}
+                  className="px-2 py-1 rounded-lg border hover:bg-red-50"
+                >
+                  Slett
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** ---------------- Admin-panel (uke/ansatt) ---------------- */
+function AdminPanel({ entries }: { entries: Entry[] }) {
+  // Grupper per userId + uke
+  const grouped = useMemo(() => {
+    const map = new Map<string, number>(); // key: `${userId}|${year}-W${week}`
+    for (const e of entries) {
+      const keyUser = e.userId || "ukjent";
+      const { year, week } = getISOWeek(e.date);
+      const key = `${keyUser}|${year}-W${String(week).padStart(2, "0")}`;
+      map.set(key, (map.get(key) || 0) + e.minutes);
+    }
+    // til array
+    const rows = Array.from(map.entries()).map(([k, mins]) => {
+      const [userId, yw] = k.split("|");
+      return { userId, yearWeek: yw, minutes: mins };
+    });
+    // sorter nyeste uke først
+    rows.sort((a, b) => (a.yearWeek < b.yearWeek ? 1 : a.yearWeek > b.yearWeek ? -1 : 0));
+    return rows;
+  }, [entries]);
+
+  return (
+    <section className="bg-white rounded-2xl shadow p-4">
+      <h2 className="font-semibold mb-3">Admin – summering pr. uke / ansatt</h2>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left border-b">
+              <th className="py-2 pr-4">Ansatt (userId)</th>
+              <th className="py-2 pr-4">Uke</th>
+              <th className="py-2 pr-4 text-right">Minutter</th>
+              <th className="py-2 pr-4 text-right">Timer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grouped.map((r, idx) => (
+              <tr key={idx} className="border-b hover:bg-gray-50">
+                <td className="py-2 pr-4">{r.userId}</td>
+                <td className="py-2 pr-4">{r.yearWeek}</td>
+                <td className="py-2 pr-4 text-right">{r.minutes}</td>
+                <td className="py-2 pr-4 text-right">{(r.minutes / 60).toFixed(2)}</td>
+              </tr>
+            ))}
+            {grouped.length === 0 && (
+              <tr><td colSpan={4} className="py-4 text-center text-gray-500">Ingen data</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/** ---------------- Import fra CSV/XLSX til sky ---------------- */
+function ImportBox({ onImported }: { onImported: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string>("");
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setInfo("");
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any>(ws, { defval: "" });
+
+      // Støtter både norske og store overskrifter
+      // Forventede kolonner: Dato, Arbeidssted, Ordrenr, Notater, Start, Slutt, Minutter, Timer
+      const toEntry = (r: any): Omit<Entry, "id" | "createdAt"> | null => {
+        const date = normalizeDate(r.Dato || r.dato || r.Date);
+        const project = (r.Arbeidssted || r.prosjekt || r.Project || "").toString().trim();
+        const activity = (r.Ordrenr || r.ordrenr || r.Activity || "").toString().trim();
+        const notes = (r.Notater || r.notater || r.Notes || "").toString();
+        const start = normalizeTime(r.Start || r.start);
+        const end = normalizeTime(r.Slutt || r.slutt || r.End);
+        let minutes = Number(r.Minutter || r.minutter || r.Minutes || 0);
+        if (!minutes && start && end) minutes = diffMinutes(start, end);
+        if (!date || !project || !minutes) return null;
+
+        return { date, project, activity, notes, start, end, minutes } as any;
+      };
+
+      const list = rows.map(toEntry).filter(Boolean) as any[];
+      if (!list.length) {
+        setInfo("Fant ingen gyldige rader i filen.");
+        setBusy(false);
+        return;
+      }
+
+      if (!supabase) throw new Error("Supabase ikke konfigurert.");
+      const { data: s } = await supabase.auth.getSession();
+      const userId = s?.session?.user?.id;
+      if (!userId) throw new Error("Du må være innlogget for å importere.");
+
+      // Batch-innsett (100 og 100)
+      const chunks: any[][] = [];
+      for (let i = 0; i < list.length; i += 100) chunks.push(list.slice(i, i + 100));
+
+      let inserted = 0;
+      for (const chunk of chunks) {
+        const payload = chunk.map((e) => toDbRow({ id: cryptoRandomId(), createdAt: Date.now(), ...e }, userId));
+        const { error, count } = await supabase
+          .from("time_entries")
+          .insert(payload, { count: "exact" });
+        if (error) throw error;
+        inserted += count || payload.length;
+      }
+
+      setInfo(`Importert ${inserted} rader.`);
+      onImported();
+    } catch (err: any) {
+      setInfo("Import feilet: " + (err?.message || String(err)));
+    } finally {
+      setBusy(false);
+      (e.target as HTMLInputElement).value = "";
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow p-4">
+      <h3 className="font-semibold mb-2">Importér til sky (CSV/XLSX)</h3>
+      <div className="flex items-center gap-3">
+        <input type="file" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+               onChange={handleFile} disabled={busy}/>
+        {busy ? <span>Importerer…</span> : <span className="text-gray-500 text-sm">{info}</span>}
+      </div>
+      <p className="text-xs text-gray-500 mt-2">
+        Støtter kolonnene: Dato, Arbeidssted, Ordrenr, Notater, Start, Slutt, Minutter (Timer er valgfritt).
+      </p>
+    </div>
+  );
+}
+
+/** ---------------- HJELPERE ---------------- */
+function getISOWeek(dateISO: string) {
+  const d = new Date(dateISO);
+  // Torsdag i inneværende uke
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = new Date(target.getFullYear(), 0, 4);
+  const firstDayNr = (firstThursday.getDay() + 6) % 7;
+  firstThursday.setDate(firstThursday.getDate() - firstDayNr + 3);
+  const week = 1 + Math.round((target.getTime() - firstThursday.getTime()) / (7 * 24 * 3600 * 1000));
+  return { year: target.getFullYear(), week };
+}
+
+function normalizeDate(v: string) {
+  if (!v) return "";
+  // aksepter dd.mm.yyyy, dd/mm/yyyy, yyyy-mm-dd
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (m) {
+    const dd = m[1].padStart(2, "0");
+    const mm = m[2].padStart(2, "0");
+    const yyyy = m[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return "";
+}
+
+function normalizeTime(v: string) {
+  if (!v) return "";
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,2}):?(\d{2})$/);
+  if (!m) return "";
+  const hh = m[1].padStart(2, "0");
+  const mm = m[2].padStart(2, "0");
+  return `${hh}:${mm}`;
+}
