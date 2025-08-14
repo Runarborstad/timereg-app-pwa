@@ -49,7 +49,7 @@ export default function TimeTrackerApp() {
     const id = cryptoRandomId();
     const date = data.date || todayISO();
     const project = (data.project || "").trim();
-    if (!project) return alert("Velg/skriv et prosjektnavn");
+    if (!project) return alert("Velg/skriv et arbeidssted");
 
     const start = data.start?.trim();
     const end = data.end?.trim();
@@ -81,7 +81,7 @@ export default function TimeTrackerApp() {
   }
 
   function startTimer(project: string, activity?: string, notes?: string) {
-    if (!project.trim()) return alert("Skriv et prosjektnavn først");
+    if (!project.trim()) return alert("Skriv inn arbeidssted først");
     if (running) return alert("En timer kjører allerede. Stopp den først.");
     setRunning({ id: cryptoRandomId(), project: project.trim(), activity: activity?.trim(), notes: notes?.trim(), startTs: Date.now() });
     addProject(project.trim());
@@ -116,7 +116,7 @@ export default function TimeTrackerApp() {
 
   function exportCSV() {
     const rows = [
-      ["Dato", "Prosjekt", "Aktivitet", "Notater", "Start", "Slutt", "Minutter", "Timer"],
+      ["Dato", "Arbeidssted", "Ordrenr", "Notater", "Start", "Slutt", "Minutter", "Timer"],
       ...entries.slice().sort((a, b) => a.date.localeCompare(b.date)).map((e) => [
         e.date, e.project, e.activity || "", (e.notes || "").replaceAll("\\n", " "), e.start || "", e.end || "",
         String(e.minutes), (e.minutes / 60).toFixed(2),
@@ -170,8 +170,8 @@ export default function TimeTrackerApp() {
               <thead>
                 <tr className="text-left border-b">
                   <th className="py-2 pr-2">Dato</th>
-                  <th className="py-2 pr-2">Prosjekt</th>
-                  <th className="py-2 pr-2">Aktivitet</th>
+                  <th className="py-2 pr-2">Arbeidssted</th>
+                  <th className="py-2 pr-2">Ordrenr</th>
                   <th className="py-2 pr-2">Notater</th>
                   <th className="py-2 pr-2">Start</th>
                   <th className="py-2 pr-2">Slutt</th>
@@ -270,20 +270,20 @@ function TimerCard({ running, onStart, onStop, projects }: {
     <section className="bg-white rounded-2xl shadow p-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-40">
-          <label className="text-sm">Prosjekt</label>
+          <label className="text-sm">Arbeidssted</label>
           <input
             className="w-full border rounded-xl px-3 py-2"
             value={project}
             onChange={(e) => setProject(e.target.value)}
             list="project-list"
-            placeholder="Skriv eller velg prosjekt"
+            placeholder="Skriv eller velg arbeidssted"
           />
           <datalist id="project-list">
             {projects.map((p) => (<option value={p} key={p} />))}
           </datalist>
         </div>
         <div className="flex-1 min-w-40">
-          <label className="text-sm">Aktivitet (valgfritt)</label>
+          <label className="text-sm">Ordrenr (valgfritt)</label>
           <input className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} />
         </div>
         <div className="flex-[2] min-w-60">
@@ -332,11 +332,11 @@ function ManualEntryCard({ projects, onAdd, onCreateProject }: {
           <input type="date" className="w-full border rounded-xl px-3 py-2" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
         <div>
-          <label className="text-sm">Prosjekt</label>
+          <label className="text-sm">Arbeidssted</label>
           <input type="text" className="w-full border rounded-xl px-3 py-2" value={project} onChange={(e) => setProject(e.target.value)} list="project-list" placeholder="Skriv eller velg" />
         </div>
         <div>
-          <label className="text-sm">Aktivitet</label>
+          <label className="text-sm">Ordrenr</label>
           <input type="text" className="w-full border rounded-xl px-3 py-2" value={activity} onChange={(e) => setActivity(e.target.value)} />
         </div>
         <div className="lg:col-span-2">
