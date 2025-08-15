@@ -763,3 +763,48 @@ function toDbUpdate(e: Entry) {
     minutes: e.minutes,
   };
 }
+
+/** ------- Hjelpehooks og formateringsfunksjoner ------- */
+
+// Ticker som brukes til å vise medgått tid mens timeren kjører
+function useElapsed(startTs: number | null) {
+  const [elapsed, setElapsed] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    if (!startTs) { setElapsed(null); return; }
+    const update = () => setElapsed(Date.now() - startTs);
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [startTs]);
+  return elapsed;
+}
+
+// Dagens dato i lokal tid som YYYY-MM-DD
+function todayISO() {
+  const d = new Date();
+  const tz = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return tz.toISOString().slice(0, 10);
+}
+
+// Forskjell i minutter mellom "HH:MM" → "HH:MM"
+function diffMinutes(start: string, end: string) {
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const s = sh * 60 + sm;
+  const e = eh * 60 + em;
+  return e - s;
+}
+
+// Formater Date → "HH:MM"
+function formatTime(d: Date) {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// Formater minutter til "HH:MM"
+function formatHM(mins: number) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
