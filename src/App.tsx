@@ -724,6 +724,7 @@ function normalizeTime(v: string) {
   const mm = m[2].padStart(2, "0");
   return `${hh}:${mm}`;
 }
+
 /** ------- Manglende hjelpere: ID + DB-mapping ------- */
 function cryptoRandomId() {
   // @ts-ignore
