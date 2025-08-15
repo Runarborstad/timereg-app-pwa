@@ -50,14 +50,28 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [profile, setProfile] = useState<Profile | null>(null);
   const isAdmin = !!profile?.is_admin;
+// --- Hash-basert "routing" ---
+// viser AdminPanel når URL = "#/admin", ellers registreringssiden
+const [routeKey, setRouteKey] = useState<string>(location.hash || "#/");
+
+useEffect(() => {
+  const onChange = () => setRouteKey(location.hash || "#/");
+  window.addEventListener("hashchange", onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener("hashchange", onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}, []);
+
+const isAdminRoute = routeKey === "#/admin";
+
 
   // Realtime channel (hold referanse for unsubscribe)
   const [channelJoined, setChannelJoined] = useState(false);
 
   // UI faner
-  const [tab, setTab] = useState<"registrering" | "admin">("registrering");
-
-  useInterval(running ? 1000 : null);
+    useInterval(running ? 1000 : null);
 
   // Persist lokalt
   useEffect(() => { localStorage.setItem("tt_entries", JSON.stringify(entries)); }, [entries]);
@@ -294,57 +308,71 @@ export default function App() {
             <button onClick={clearLocal} className="px-3 py-2 rounded-2xl border hover:bg-red-50">Tøm lokalt</button>
           </div>
 
-          {/* Faner */}
-          <div className="w-full flex gap-2 mt-2">
-            <button onClick={() => setTab("registrering")} className={`px-3 py-1 rounded-xl border ${tab === "registrering" ? "bg-gray-100" : ""}`}>Registrering</button>
-            {isAdmin && (
-              <button onClick={() => setTab("admin")} className={`px-3 py-1 rounded-xl border ${tab === "admin" ? "bg-gray-100" : ""}`}>Admin</button>
-            )}
-          </div>
+          {/* Faner / lenker */}
+<div className="w-full flex gap-2 mt-2">
+  {!isAdminRoute ? (
+    <>
+      <a href="#/" className="px-3 py-1 rounded-xl border bg-gray-100">Registrering</a>
+      {isAdmin && <a href="#/admin" className="px-3 py-1 rounded-xl border">Admin</a>}
+    </>
+  ) : (
+    <>
+      <a href="#/" className="px-3 py-1 rounded-xl border">Registrering</a>
+      {isAdmin && <a href="#/admin" className="px-3 py-1 rounded-xl border bg-gray-100">Admin</a>}
+    </>
+  )}
+</div>
         </div>
       </header>
 
       {/* INNHOLD */}
       <main className="max-w-6xl mx-auto p-4 grid gap-4">
-        {tab === "registrering" ? (
-          <>
-            <TimerCard running={running} onStart={startTimer} onStop={stopTimer} projects={projects} />
-            <ManualEntryCard projects={projects} onAdd={addManualEntry} onCreateProject={addProject} />
+  {isAdminRoute ? (
+    isAdmin ? (
+      <AdminPanel entries={entries} />
+    ) : (
+      <div className="bg-white rounded-2xl shadow p-6">
+        <h2 className="font-semibold text-lg mb-2">Ingen tilgang</h2>
+        <p className="text-gray-600">Du må være admin for å se denne siden.</p>
+      </div>
+    )
+  ) : (
+    <>
+      <TimerCard running={running} onStart={startTimer} onStop={stopTimer} projects={projects} />
+      <ManualEntryCard projects={projects} onAdd={addManualEntry} onCreateProject={addProject} />
 
-            <section className="bg-white rounded-2xl shadow p-4">
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col">
-                  <label className="text-sm">Visning</label>
-                  <select value={view} onChange={(e) => setView(e.target.value as any)} className="border rounded-xl px-3 py-2">
-                    <option value="day">Dag</option>
-                    <option value="week">Uke</option>
-                    <option value="all">Alle</option>
-                  </select>
-                </div>
-                {view !== "all" && (
-                  <div className="flex flex-col">
-                    <label className="text-sm">Dato</label>
-                    <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded-xl px-3 py-2" />
-                  </div>
-                )}
-                <div className="ml-auto text-right">
-                  <div className="text-sm text-gray-500">Totalt</div>
-                  <div className="text-2xl font-semibold">{formatHM(grandTotal)}</div>
-                </div>
-              </div>
+      <section className="bg-white rounded-2xl shadow p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col">
+            <label className="text-sm">Visning</label>
+            <select value={view} onChange={(e) => setView(e.target.value as any)} className="border rounded-xl px-3 py-2">
+              <option value="day">Dag</option>
+              <option value="week">Uke</option>
+              <option value="all">Alle</option>
+            </select>
+          </div>
+          {view !== "all" && (
+            <div className="flex flex-col">
+              <label className="text-sm">Dato</label>
+              <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="border rounded-xl px-3 py-2" />
+            </div>
+          )}
+          <div className="ml-auto text-right">
+            <div className="text-sm text-gray-500">Totalt</div>
+            <div className="text-2xl font-semibold">{formatHM(grandTotal)}</div>
+          </div>
+        </div>
 
-              <TableEditable
-                entries={filtered}
-                projects={projects}
-                onUpdate={updateEntry}
-                onDelete={deleteEntry}
-              />
-            </section>
-          </>
-        ) : (
-          <AdminPanel entries={entries} />
-        )}
-      </main>
+        <TableEditable
+          entries={filtered}
+          projects={projects}
+          onUpdate={updateEntry}
+          onDelete={deleteEntry}
+        />
+      </section>
+    </>
+  )}
+</main>
 
       {/* Import (vises i begge faner) */}
       {session?.user && (
