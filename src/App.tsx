@@ -141,7 +141,11 @@ export default function App() {
   // Avledede summer
   const filtered = useMemo(() => filterEntries(entries, view, filterDate), [entries, view, filterDate]);
   const totals = useMemo(() => sumMinutesByDate(filtered), [filtered]);
-  const grandTotal = useMemo(() => filtered.reduce((a, e) => a + e.minutes, 0), [filtered]);
+  const grandTotal = useMemo(
+  () => filtered.reduce((a: number, e: Entry) => a + e.minutes, 0),
+  [filtered]
+);
+
 
   // CRUD (lokal + sky)
   function addProject(name: string) {
@@ -807,4 +811,79 @@ function formatHM(mins: number) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** ------- Flere hjelpere som brukes i appen ------- */
+
+// Kjør et intervall (brukes for å tvinge re-render mens timeren går)
+function useInterval(delay: number | null) {
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => {
+    if (delay === null) return;
+    const id = setInterval(() => setTick((x) => x + 1), delay);
+    return () => clearInterval(id);
+  }, [delay]);
+  return null;
+}
+
+// Lokal persistering (fallback når ikke innlogget)
+function loadEntries(): Entry[] {
+  try {
+    const raw = localStorage.getItem("tt_entries");
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+function loadProjects(): string[] {
+  try {
+    const raw = localStorage.getItem("tt_projects");
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+function loadTimer() {
+  try {
+    const raw = localStorage.getItem("tt_running");
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    return obj && obj.startTs ? obj : null;
+  } catch {
+    return null;
+  }
+}
+
+// Filtrering av registreringer for visning (dag/uke/alle)
+function filterEntries(
+  entries: Entry[],
+  view: "day" | "week" | "all",
+  baseDateISO: string
+): Entry[] {
+  if (view === "all") return entries;
+  const base = new Date(baseDateISO);
+  const start = new Date(base);
+  const end = new Date(base);
+
+  if (view === "week") {
+    // mandag som ukestart
+    const day = (base.getDay() + 6) % 7;
+    start.setDate(base.getDate() - day);
+    end.setDate(start.getDate() + 6);
+  }
+  const startISO = start.toISOString().slice(0, 10);
+  const endISO = end.toISOString().slice(0, 10);
+  return entries.filter((e) => e.date >= startISO && e.date <= endISO);
+}
+
+// Summer minutter per dato (brukes i footeren)
+function sumMinutesByDate(list: Entry[]) {
+  return list.reduce<Record<string, number>>((acc, e) => {
+    acc[e.date] = (acc[e.date] || 0) + e.minutes;
+    return acc;
+  }, {});
 }
