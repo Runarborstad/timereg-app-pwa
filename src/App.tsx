@@ -724,3 +724,41 @@ function normalizeTime(v: string) {
   const mm = m[2].padStart(2, "0");
   return `${hh}:${mm}`;
 }
+/** ------- Manglende hjelpere: ID + DB-mapping ------- */
+function cryptoRandomId() {
+  // @ts-ignore
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    // @ts-ignore
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2);
+}
+
+function toDbRow(e: Entry, userId: string) {
+  // Konverterer en Entry til format for INSERT i Supabase
+  return {
+    id: e.id,
+    user_id: userId,
+    date: e.date, // 'YYYY-MM-DD'
+    project: e.project,
+    activity: e.activity || null,
+    notes: e.notes || null,
+    start: e.start ? `${e.start}:00` : null, // 'HH:MM:SS' eller null
+    end: e.end ? `${e.end}:00` : null,
+    minutes: e.minutes,
+    created_at: new Date(e.createdAt).toISOString(),
+  };
+}
+
+function toDbUpdate(e: Entry) {
+  // Felt brukt ved UPDATE (uten id/user_id)
+  return {
+    date: e.date,
+    project: e.project,
+    activity: e.activity || null,
+    notes: e.notes || null,
+    start: e.start ? `${e.start}:00` : null,
+    end: e.end ? `${e.end}:00` : null,
+    minutes: e.minutes,
+  };
+}
