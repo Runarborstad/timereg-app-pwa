@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createClient, Session, SupabaseClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 
-/** Timeregistrering – mørkt tema som matcher PlanControl */
-
 type Entry = {
   id: string;
   date: string;
@@ -37,7 +35,7 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 const supabase: SupabaseClient | null =
   SUPABASE_URL && SUPABASE_ANON_KEY ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-// ── Design tokens matching PlanControl ──────────────────────────────────────
+/* ── Global CSS ─────────────────────────────────────────────────────────── */
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap');
 
@@ -53,56 +51,67 @@ const css = `
     --text:      #e8e9ea;
     --muted:     #6b7280;
     --danger:    #ef4444;
-    --warn:      #f59e0b;
     --radius:    6px;
     --font-ui:   'Syne', sans-serif;
     --font-mono: 'DM Mono', monospace;
+    --tap:       44px; /* minimum tap target */
   }
+
+  html { -webkit-text-size-adjust: 100%; }
 
   body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-ui);
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
   }
 
+  /* ── Inputs ── */
   input, select, textarea {
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: var(--radius);
-    padding: 6px 10px;
+    padding: 10px 12px;
     font-family: var(--font-ui);
-    font-size: 13px;
+    font-size: 15px; /* 16px prevents iOS zoom, 15px is fine */
     outline: none;
     transition: border-color 0.15s;
     width: 100%;
+    min-height: var(--tap);
+    -webkit-appearance: none;
   }
   input:focus, select:focus { border-color: var(--accent); }
   input:disabled { opacity: 0.4; cursor: not-allowed; }
   input[type="date"]::-webkit-calendar-picker-indicator,
   input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+  /* prevent iOS zoom on focus – font-size >= 16px handles it, but also set explicitly */
+  input[type="date"], input[type="time"] { font-size: 15px; }
 
   label {
     display: block;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 4px;
+    letter-spacing: 0.07em;
+    margin-bottom: 5px;
   }
 
+  /* ── Buttons ── */
   .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    padding: 7px 14px;
+    padding: 0 18px;
+    height: var(--tap);
     border-radius: var(--radius);
     font-family: var(--font-ui);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     cursor: pointer;
     border: none;
@@ -110,36 +119,49 @@ const css = `
     letter-spacing: 0.03em;
     text-decoration: none;
     white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
   .btn-accent  { background: var(--accent);  color: #111; }
-  .btn-accent:hover  { background: #d4f55a; }
+  .btn-accent:active  { background: #d4f55a; }
   .btn-green   { background: var(--accent2); color: #111; }
-  .btn-green:hover   { background: #22c55e; }
+  .btn-green:active   { background: #22c55e; }
   .btn-danger  { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
-  .btn-danger:hover  { background: rgba(239,68,68,0.1); }
+  .btn-danger:active  { background: rgba(239,68,68,0.15); }
   .btn-ghost   { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-  .btn-ghost:hover   { border-color: var(--accent); color: var(--accent); }
+  .btn-ghost:active   { border-color: var(--accent); color: var(--accent); }
   .btn-red     { background: var(--danger); color: #fff; }
-  .btn-red:hover     { background: #dc2626; }
+  .btn-red:active     { background: #dc2626; }
+  .btn-full    { width: 100%; }
 
+  /* ── Big timer button on mobile ── */
+  .btn-timer {
+    height: 64px;
+    font-size: 16px;
+    border-radius: 10px;
+    width: 100%;
+  }
+
+  /* ── Cards ── */
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 14px;
   }
-
   .card-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.09em;
     color: var(--muted);
     margin-bottom: 12px;
   }
 
+  /* ── Tabs ── */
   .tab {
-    padding: 5px 12px;
+    padding: 0 14px;
+    height: 34px;
     border-radius: var(--radius);
     font-size: 12px;
     font-weight: 700;
@@ -150,10 +172,105 @@ const css = `
     transition: all 0.15s;
     display: inline-flex;
     align-items: center;
+    -webkit-tap-highlight-color: transparent;
   }
-  .tab:hover { color: var(--text); border-color: var(--muted); }
   .tab.active { background: var(--accent); color: #111; border-color: var(--accent); }
 
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    background: rgba(200,241,53,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(200,241,53,0.25);
+  }
+  .tag-running {
+    background: rgba(74,222,128,0.15);
+    color: var(--accent2);
+    border-color: rgba(74,222,128,0.3);
+  }
+
+  /* ── Summary chip ── */
+  .summary-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    min-width: 90px;
+  }
+  .summary-chip .val {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .summary-chip .lbl {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Timer display ── */
+  .timer-display {
+    font-family: var(--font-mono);
+    font-size: 52px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  /* ── Entry cards (mobile list) ── */
+  .entry-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .entry-card-main { flex: 1; min-width: 0; }
+  .entry-card-project {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .entry-card-meta {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .entry-card-time {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--accent);
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .entry-card-delete {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+  .entry-card-delete:active { color: var(--danger); }
+
+  /* ── Desktop table ── */
   table { width: 100%; border-collapse: collapse; }
   th {
     text-align: left;
@@ -168,32 +285,16 @@ const css = `
   th.right { text-align: right; }
   td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tr:hover td { background: rgba(255,255,255,0.02); }
-
   td input {
     padding: 4px 7px;
     font-size: 12px;
     font-family: var(--font-mono);
     background: transparent;
     border: 1px solid transparent;
+    min-height: unset;
   }
   td input:hover { border-color: var(--border); background: var(--surface2); }
   td input:focus { border-color: var(--accent); background: var(--surface2); }
-
-  .mono { font-family: var(--font-mono); }
-  .muted { color: var(--muted); }
-  .accent { color: var(--accent); }
-  .right { text-align: right; }
-
-  .timer-display {
-    font-family: var(--font-mono);
-    font-size: 28px;
-    font-weight: 500;
-    letter-spacing: 0.05em;
-  }
-
-  .pulse { animation: pulse 1.5s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
   .dagssum td {
     background: rgba(200,241,53,0.04);
     font-family: var(--font-mono);
@@ -203,36 +304,109 @@ const css = `
     border-bottom: 2px solid var(--border);
   }
 
-  .tag {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 99px;
-    font-size: 11px;
-    font-weight: 700;
-    background: rgba(200,241,53,0.12);
-    color: var(--accent);
-    border: 1px solid rgba(200,241,53,0.25);
+  /* ── Utilities ── */
+  .mono  { font-family: var(--font-mono); }
+  .muted { color: var(--muted); }
+  .right { text-align: right; }
+  .pulse { animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Responsive breakpoints ── */
+  /* Mobile: < 640px → stacked layout, card list, big buttons */
+  /* Desktop: >= 640px → grid layout, table */
+
+  .desktop-only { display: none; }
+  .mobile-only  { display: block; }
+
+  @media (min-width: 640px) {
+    .desktop-only { display: block; }
+    .mobile-only  { display: none; }
+    input, select { font-size: 13px; min-height: unset; padding: 6px 10px; }
+    .btn { height: 36px; font-size: 12px; padding: 0 14px; }
+    .btn-timer { height: 40px; font-size: 13px; border-radius: var(--radius); }
   }
 
-  .summary-chip {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 14px;
-    min-width: 100px;
+  /* ── Bottom nav (mobile only) ── */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    z-index: 20;
+    padding-bottom: env(safe-area-inset-bottom);
   }
-  .summary-chip .val {
-    font-family: var(--font-mono);
-    font-size: 18px;
-    font-weight: 500;
-    color: var(--accent);
-  }
-  .summary-chip .lbl {
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0 8px;
     font-size: 10px;
-    color: var(--muted);
-    text-transform: uppercase;
+    font-weight: 700;
     letter-spacing: 0.06em;
-    margin-top: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    gap: 3px;
+  }
+  .bottom-nav-item.active { color: var(--accent); }
+  .bottom-nav-icon { font-size: 20px; line-height: 1; }
+
+  @media (min-width: 640px) {
+    .bottom-nav { display: none; }
+  }
+
+  /* ── Main padding accounts for bottom nav on mobile ── */
+  .main-content {
+    padding: 12px;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom));
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    gap: 10px;
+  }
+  @media (min-width: 640px) {
+    .main-content { padding: 16px; padding-bottom: 16px; }
+  }
+
+  /* ── Modal / bottom sheet for mobile manual entry ── */
+  .sheet-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 30;
+    display: flex;
+    align-items: flex-end;
+  }
+  .sheet {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    padding: 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: grid;
+    gap: 12px;
+  }
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 99px;
+    margin: 0 auto 12px;
+  }
+
+  /* ── Field row for two fields side by side ── */
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 `;
 
@@ -249,6 +423,10 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const isAdmin = !!profile?.is_admin;
 
+  // Mobile tabs: "timer" | "manual" | "list" | "admin"
+  const [mobileTab, setMobileTab] = useState<"timer" | "manual" | "list" | "admin">("timer");
+
+  // Desktop hash routing
   const [routeKey, setRouteKey] = useState<string>(location.hash || "#/");
   useEffect(() => {
     const onChange = () => setRouteKey(location.hash || "#/");
@@ -260,6 +438,7 @@ export default function App() {
 
   const [channelJoined, setChannelJoined] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useInterval(running ? 1000 : null);
 
@@ -306,7 +485,7 @@ export default function App() {
     if (!supabase || !session?.user || channelJoined) return;
     const ch = supabase.channel("time_entries_changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "time_entries" }, () => loadCloudEntries())
-      .subscribe((status) => { if (status === "SUBSCRIBED") setChannelJoined(true); });
+      .subscribe(status => { if (status === "SUBSCRIBED") setChannelJoined(true); });
     return () => { supabase.removeChannel(ch); setChannelJoined(false); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id, channelJoined]);
@@ -346,8 +525,7 @@ export default function App() {
     if (!confirm("Slette denne registreringen?")) return;
     setEntries(prev => prev.filter(e => e.id !== id));
     if (supabase && session?.user) {
-      const { error } = await supabase.from("time_entries").delete().eq("id", id);
-      if (error) console.warn(error.message);
+      await supabase.from("time_entries").delete().eq("id", id);
     }
   }
 
@@ -356,8 +534,7 @@ export default function App() {
     if (supabase && session?.user) {
       const current = entries.find(e => e.id === id);
       if (!current) return;
-      const { error } = await supabase.from("time_entries").update(toDbUpdate({ ...current, ...patch })).eq("id", id);
-      if (error) console.warn(error.message);
+      await supabase.from("time_entries").update(toDbUpdate({ ...current, ...patch })).eq("id", id);
     }
   }
 
@@ -383,9 +560,8 @@ export default function App() {
     setRunning(null);
     if (supabase && session?.user) {
       setSaving(true);
-      const { error } = await supabase.from("time_entries").insert(toDbRow(entry, session.user.id));
+      await supabase.from("time_entries").insert(toDbRow(entry, session.user.id));
       setSaving(false);
-      if (error) console.warn(error.message);
     }
   }
 
@@ -401,7 +577,7 @@ export default function App() {
     if (error) return alert("Feil: " + error.message);
     alert("Sjekk e‑posten for innloggingslenke.");
   }
-  async function signOut() { await supabase?.auth.signOut(); }
+  async function signOut() { await supabase?.auth.signOut(); setMenuOpen(false); }
 
   function exportXLSX() {
     const header = ["Dato", "Arbeidssted", "Ordrenr", "Notater", "Start", "Slutt", "Minutter", "Timer"];
@@ -415,123 +591,232 @@ export default function App() {
     XLSX.writeFile(wb, `timereg-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
+  const elapsedMs = useElapsed(running?.startTs ?? null);
+  const elapsedMin = elapsedMs !== null ? Math.floor(elapsedMs / 60000) : null;
+  const elapsedSec = elapsedMs !== null ? Math.floor((elapsedMs % 60000) / 1000) : null;
+
   return (
     <>
       <style>{css}</style>
       <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
 
-        {/* HEADER */}
+        {/* ── HEADER ── */}
         <header style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", position: "sticky", top: 0, zIndex: 10 }}>
-          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "10px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 1200, margin: "0 auto", padding: "10px 14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
 
               {/* Logo */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 8 }}>
-                <div style={{ width: 28, height: 28, background: "var(--accent)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: 14, fontWeight: 800, color: "#111" }}>T</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 26, height: 26, background: "var(--accent)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: "#111" }}>T</span>
                 </div>
-                <span style={{ fontWeight: 800, fontSize: 15, letterSpacing: "0.04em" }}>TIMEREG</span>
+                <span style={{ fontWeight: 800, fontSize: 14, letterSpacing: "0.05em" }}>TIMEREG</span>
               </div>
 
-              {saving && <span className="muted pulse" style={{ fontSize: 11 }}>● lagrer…</span>}
-
-              {!session?.user ? (
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input type="email" style={{ width: 220 }} placeholder="E‑post for skylagring" value={email}
-                    onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMagicLink()} />
-                  <button className="btn btn-ghost" onClick={sendMagicLink}>Send innloggingslenke</button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                  <span className="muted">Innlogget som</span>
-                  <span style={{ color: "var(--accent)", fontWeight: 600 }}>{session.user.email}</span>
-                  <button className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={signOut}>Logg ut</button>
-                </div>
+              {running && (
+                <span className="tag tag-running pulse" style={{ fontSize: 10 }}>● kjører</span>
               )}
+              {saving && <span style={{ fontSize: 11, color: "var(--muted)" }} className="pulse">lagrer…</span>}
 
-              <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                <button className="btn btn-ghost" onClick={exportXLSX}>↓ Excel</button>
-                <button className="btn btn-danger" style={{ padding: "5px 12px", fontSize: 12 }} onClick={clearLocal}>Tøm lokalt</button>
+              {/* Desktop auth */}
+              <div className="desktop-only" style={{ display: "none", marginLeft: "auto" }}>
+                {!session?.user ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input type="email" style={{ width: 200 }} placeholder="E‑post" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && sendMagicLink()} />
+                    <button className="btn btn-ghost" onClick={sendMagicLink}>Logg inn</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                    <span style={{ color: "var(--muted)" }}>{session.user.email}</span>
+                    <button className="btn btn-ghost" style={{ padding: "0 10px", height: 30, fontSize: 11 }} onClick={signOut}>Logg ut</button>
+                    <button className="btn btn-ghost" style={{ padding: "0 10px", height: 30, fontSize: 11 }} onClick={exportXLSX}>↓ Excel</button>
+                    <button className="btn btn-danger" style={{ padding: "0 10px", height: 30, fontSize: 11 }} onClick={clearLocal}>Tøm</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Mobile: hamburger menu */}
+              <div className="mobile-only" style={{ marginLeft: "auto" }}>
+                <button className="btn btn-ghost" style={{ padding: "0 12px", height: 36, fontSize: 18 }} onClick={() => setMenuOpen(!menuOpen)}>
+                  {menuOpen ? "✕" : "☰"}
+                </button>
               </div>
             </div>
 
-            {/* Tabs */}
-            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            {/* Mobile dropdown menu */}
+            {menuOpen && (
+              <div style={{ marginTop: 10, padding: "12px 0", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 10 }}>
+                {!session?.user ? (
+                  <>
+                    <input type="email" placeholder="E‑post for skylagring" value={email} onChange={e => setEmail(e.target.value)} />
+                    <button className="btn btn-ghost btn-full" onClick={() => { sendMagicLink(); setMenuOpen(false); }}>Send innloggingslenke</button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>Innlogget: <span style={{ color: "var(--accent)" }}>{session.user.email}</span></div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <button className="btn btn-ghost" onClick={() => { exportXLSX(); setMenuOpen(false); }}>↓ Excel</button>
+                      <button className="btn btn-danger" onClick={() => { clearLocal(); setMenuOpen(false); }}>Tøm</button>
+                      <button className="btn btn-ghost" onClick={signOut}>Logg ut</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Desktop tabs */}
+            <div className="desktop-only" style={{ display: "none", gap: 6, marginTop: 10 }}>
               <a href="#/" className={`tab ${!isAdminRoute ? "active" : ""}`}>Registrering</a>
               {isAdmin && <a href="#/admin" className={`tab ${isAdminRoute ? "active" : ""}`}>Admin</a>}
             </div>
           </div>
         </header>
 
-        {/* MAIN */}
-        <main style={{ maxWidth: 1200, margin: "0 auto", padding: "16px", display: "grid", gap: 12 }}>
-          {isAdminRoute ? (
-            isAdmin ? <AdminPanel entries={entries} /> : (
-              <div className="card"><p style={{ color: "var(--danger)" }}>Ingen tilgang – du må være admin.</p></div>
-            )
-          ) : (
-            <>
-              <TimerCard running={running} onStart={startTimer} onStop={stopTimer} projects={projects} />
-              <ManualEntryCard projects={projects} onAdd={addManualEntry} />
+        {/* ── DESKTOP LAYOUT ── */}
+        <div className="desktop-only">
+          <main className="main-content">
+            {isAdminRoute && isAdmin ? (
+              <AdminPanel entries={entries} />
+            ) : isAdminRoute ? (
+              <div className="card"><p style={{ color: "var(--danger)" }}>Ingen tilgang.</p></div>
+            ) : (
+              <>
+                <TimerCardDesktop running={running} onStart={startTimer} onStop={stopTimer} projects={projects} elapsedMin={elapsedMin} />
+                <ManualEntryCard projects={projects} onAdd={addManualEntry} />
+                <FilterAndTable
+                  view={view} setView={setView} filterDate={filterDate} setFilterDate={setFilterDate}
+                  filtered={filtered} totals={totals} grandTotal={grandTotal}
+                  projects={projects} onUpdate={updateEntry} onDelete={deleteEntry}
+                />
+                {session?.user && <ImportBox onImported={loadCloudEntries} />}
+              </>
+            )}
+          </main>
+        </div>
 
-              <div className="card">
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 12, marginBottom: 12 }}>
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
-                    <div>
-                      <label>Visning</label>
-                      <select value={view} onChange={e => setView(e.target.value as any)} style={{ width: 100 }}>
-                        <option value="day">Dag</option>
-                        <option value="week">Uke</option>
-                        <option value="all">Alle</option>
-                      </select>
-                    </div>
-                    {view !== "all" && (
-                      <div>
-                        <label>Dato</label>
-                        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ width: 150 }} />
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginLeft: "auto" }}>
-                    <div className="summary-chip">
-                      <div className="val">{formatHM(grandTotal)}</div>
-                      <div className="lbl">Totalt</div>
-                    </div>
-                  </div>
-                </div>
+        {/* ── MOBILE LAYOUT ── */}
+        <div className="mobile-only">
+          <main className="main-content">
+            {mobileTab === "timer" && (
+              <MobileTimerTab
+                running={running} onStart={startTimer} onStop={stopTimer}
+                projects={projects} elapsedMin={elapsedMin} elapsedSec={elapsedSec}
+              />
+            )}
+            {mobileTab === "manual" && (
+              <ManualEntryCard projects={projects} onAdd={(d) => { addManualEntry(d); setMobileTab("list"); }} />
+            )}
+            {mobileTab === "list" && (
+              <MobileListTab
+                view={view} setView={setView} filterDate={filterDate} setFilterDate={setFilterDate}
+                filtered={filtered} totals={totals} grandTotal={grandTotal} onDelete={deleteEntry}
+              />
+            )}
+            {mobileTab === "admin" && isAdmin && <AdminPanel entries={entries} />}
+            {mobileTab === "admin" && !isAdmin && (
+              <div className="card"><p style={{ color: "var(--danger)" }}>Ingen tilgang.</p></div>
+            )}
+          </main>
 
-                <TableEditable entries={filtered} projects={projects} totals={totals} onUpdate={updateEntry} onDelete={deleteEntry} />
-
-                {filtered.length === 0 && (
-                  <p style={{ textAlign: "center", color: "var(--muted)", padding: "32px 0", fontSize: 13 }}>
-                    Ingen registreringer for valgt periode.
-                  </p>
-                )}
-              </div>
-
-              {session?.user && <ImportBox onImported={loadCloudEntries} />}
-            </>
-          )}
-        </main>
+          {/* Bottom navigation */}
+          <nav className="bottom-nav">
+            <button className={`bottom-nav-item ${mobileTab === "timer" ? "active" : ""}`} onClick={() => setMobileTab("timer")}>
+              <span className="bottom-nav-icon">⏱</span>Timer
+            </button>
+            <button className={`bottom-nav-item ${mobileTab === "manual" ? "active" : ""}`} onClick={() => setMobileTab("manual")}>
+              <span className="bottom-nav-icon">✚</span>Manuelt
+            </button>
+            <button className={`bottom-nav-item ${mobileTab === "list" ? "active" : ""}`} onClick={() => setMobileTab("list")}>
+              <span className="bottom-nav-icon">☰</span>Oversikt
+            </button>
+            {isAdmin && (
+              <button className={`bottom-nav-item ${mobileTab === "admin" ? "active" : ""}`} onClick={() => setMobileTab("admin")}>
+                <span className="bottom-nav-icon">⚙</span>Admin
+              </button>
+            )}
+          </nav>
+        </div>
       </div>
     </>
   );
 }
 
-/* ─── TimerCard ─────────────────────────────────────────────────────────── */
-function TimerCard({ running, onStart, onStop, projects }: {
-  running: { id: string; project: string; activity?: string; notes?: string; startTs: number } | null;
-  onStart: (p: string, a?: string, n?: string) => void;
-  onStop: () => void;
-  projects: string[];
+/* ── Mobile Timer Tab ───────────────────────────────────────────────────── */
+function MobileTimerTab({ running, onStart, onStop, projects, elapsedMin, elapsedSec }: {
+  running: any; onStart: (p: string, a?: string, n?: string) => void; onStop: () => void;
+  projects: string[]; elapsedMin: number | null; elapsedSec: number | null;
 }) {
   const [project, setProject] = useState("");
   const [activity, setActivity] = useState("");
   const [notes, setNotes] = useState("");
   useEffect(() => { if (running) { setProject(running.project); setActivity(running.activity || ""); setNotes(running.notes || ""); } }, [running]);
 
-  const elapsedMs = useElapsed(running?.startTs ?? null);
-  const elapsedMin = elapsedMs !== null ? Math.floor(elapsedMs / 60000) : null;
+  const hh = elapsedMin !== null ? String(Math.floor(elapsedMin / 60)).padStart(2, "0") : "--";
+  const mm = elapsedMin !== null ? String(elapsedMin % 60).padStart(2, "0") : "--";
+  const ss = elapsedSec !== null ? String(elapsedSec).padStart(2, "0") : "--";
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {/* Big timer display */}
+      <div className="card" style={{ textAlign: "center", padding: "28px 16px" }}>
+        <div className="timer-display" style={{ color: running ? "var(--accent)" : "var(--border)" }}>
+          {hh}:{mm}<span style={{ fontSize: 24, opacity: 0.6 }}>:{ss}</span>
+        </div>
+        {running && (
+          <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)" }}>
+            <span className="tag tag-running">● kjører</span>{" "}
+            {running.project}{running.activity ? ` · ${running.activity}` : ""}
+          </div>
+        )}
+        {running && (
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+            Startet {formatTime(new Date(running.startTs))}
+          </div>
+        )}
+      </div>
+
+      {/* Fields – disabled while running */}
+      <div className="card" style={{ display: "grid", gap: 10 }}>
+        <div>
+          <label>Arbeidssted</label>
+          <input value={project} onChange={e => setProject(e.target.value)} list="m-timer-projects" placeholder="Skriv eller velg" disabled={!!running} />
+          <datalist id="m-timer-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
+        </div>
+        <div className="field-row">
+          <div>
+            <label>Ordrenr</label>
+            <input value={activity} onChange={e => setActivity(e.target.value)} placeholder="Valgfritt" disabled={!!running} />
+          </div>
+          <div>
+            <label>Notater</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valgfritt" disabled={!!running} />
+          </div>
+        </div>
+      </div>
+
+      {/* Big action button */}
+      {!running ? (
+        <button className="btn btn-green btn-timer" onClick={() => onStart(project, activity, notes)}>
+          ▶ Start timer
+        </button>
+      ) : (
+        <button className="btn btn-red btn-timer" onClick={onStop}>
+          ■ Stopp og lagre
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── Desktop Timer Card ─────────────────────────────────────────────────── */
+function TimerCardDesktop({ running, onStart, onStop, projects, elapsedMin }: {
+  running: any; onStart: (p: string, a?: string, n?: string) => void; onStop: () => void;
+  projects: string[]; elapsedMin: number | null;
+}) {
+  const [project, setProject] = useState("");
+  const [activity, setActivity] = useState("");
+  const [notes, setNotes] = useState("");
+  useEffect(() => { if (running) { setProject(running.project); setActivity(running.activity || ""); setNotes(running.notes || ""); } }, [running]);
 
   return (
     <div className="card">
@@ -539,10 +824,10 @@ function TimerCard({ running, onStart, onStop, projects }: {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
         <div style={{ flex: "1 1 160px" }}>
           <label>Arbeidssted</label>
-          <input value={project} onChange={e => setProject(e.target.value)} list="timer-projects" placeholder="Skriv eller velg" disabled={!!running} />
-          <datalist id="timer-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
+          <input value={project} onChange={e => setProject(e.target.value)} list="d-timer-projects" placeholder="Skriv eller velg" disabled={!!running} />
+          <datalist id="d-timer-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
         </div>
-        <div style={{ flex: "1 1 140px" }}>
+        <div style={{ flex: "1 1 130px" }}>
           <label>Ordrenr</label>
           <input value={activity} onChange={e => setActivity(e.target.value)} placeholder="Valgfritt" disabled={!!running} />
         </div>
@@ -550,20 +835,20 @@ function TimerCard({ running, onStart, onStop, projects }: {
           <label>Notater</label>
           <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valgfritt" disabled={!!running} />
         </div>
-        <div style={{ textAlign: "center", minWidth: 90 }}>
+        <div style={{ textAlign: "center", minWidth: 80 }}>
           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--muted)", marginBottom: 4 }}>Tid</div>
-          <div className="timer-display" style={{ color: running ? "var(--accent)" : "var(--border)" }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 26, fontWeight: 500, color: running ? "var(--accent)" : "var(--border)" }}>
             {elapsedMin !== null ? formatHM(elapsedMin) : "--:--"}
           </div>
         </div>
         {!running
-          ? <button className="btn btn-green" onClick={() => onStart(project, activity, notes)}>▶ Start</button>
-          : <button className="btn btn-red" onClick={onStop}>■ Stopp &amp; lagre</button>
+          ? <button className="btn btn-green btn-timer" style={{ width: "auto", padding: "0 20px" }} onClick={() => onStart(project, activity, notes)}>▶ Start</button>
+          : <button className="btn btn-red btn-timer" style={{ width: "auto", padding: "0 20px" }} onClick={onStop}>■ Stopp &amp; lagre</button>
         }
       </div>
       {running && (
-        <div style={{ marginTop: 10, fontSize: 11, color: "var(--muted)" }}>
-          <span className="tag">kjører</span>{" "}
+        <div style={{ marginTop: 8, fontSize: 11, color: "var(--muted)" }}>
+          <span className="tag tag-running">kjører</span>{" "}
           Startet {formatTime(new Date(running.startTs))} · {running.project}{running.activity ? ` · ${running.activity}` : ""}
         </div>
       )}
@@ -571,7 +856,7 @@ function TimerCard({ running, onStart, onStop, projects }: {
   );
 }
 
-/* ─── ManualEntryCard ───────────────────────────────────────────────────── */
+/* ── ManualEntryCard (shared mobile + desktop) ──────────────────────────── */
 function ManualEntryCard({ projects, onAdd }: { projects: string[]; onAdd: (d: any) => void }) {
   const [date, setDate] = useState(todayISO());
   const [project, setProject] = useState("");
@@ -585,123 +870,213 @@ function ManualEntryCard({ projects, onAdd }: { projects: string[]; onAdd: (d: a
     if (start && end) { const d = diffMinutes(start, end); if (d > 0) setMinutes(String(d)); }
   }, [start, end]);
 
+  function handleAdd() {
+    onAdd({ date, project, activity, notes, start, end, minutes: minutes ? Number(minutes) : 0 });
+    // Reset after submit
+    setProject(""); setActivity(""); setNotes(""); setStart(""); setEnd(""); setMinutes("");
+  }
+
   return (
     <div className="card">
       <div className="card-title">+ Legg inn manuelt</div>
-      {/* FIX: auto-fill grid – ingen overflow */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10, alignItems: "end" }}>
-        <div>
-          <label>Dato</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+      <div style={{ display: "grid", gap: 10 }}>
+        <div className="field-row">
+          <div>
+            <label>Dato</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div>
+            <label>Arbeidssted</label>
+            <input value={project} onChange={e => setProject(e.target.value)} list="manual-projects" placeholder="Skriv eller velg" />
+            <datalist id="manual-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
+          </div>
         </div>
-        <div>
-          <label>Arbeidssted</label>
-          <input value={project} onChange={e => setProject(e.target.value)} list="manual-projects" placeholder="Skriv eller velg" />
-          <datalist id="manual-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
+        <div className="field-row">
+          <div>
+            <label>Ordrenr</label>
+            <input value={activity} onChange={e => setActivity(e.target.value)} placeholder="Valgfritt" />
+          </div>
+          <div>
+            <label>Notater</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valgfritt" />
+          </div>
         </div>
-        <div>
-          <label>Ordrenr</label>
-          <input value={activity} onChange={e => setActivity(e.target.value)} placeholder="Valgfritt" />
+        <div className="field-row">
+          <div>
+            <label>Start</label>
+            <input type="time" value={start} onChange={e => setStart(e.target.value)} />
+          </div>
+          <div>
+            <label>Slutt</label>
+            <input type="time" value={end} onChange={e => setEnd(e.target.value)} />
+          </div>
         </div>
-        <div style={{ gridColumn: "span 2" }}>
-          <label>Notater</label>
-          <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Valgfritt" />
-        </div>
-        <div>
-          <label>Start</label>
-          <input type="time" value={start} onChange={e => setStart(e.target.value)} />
-        </div>
-        <div>
-          <label>Slutt</label>
-          <input type="time" value={end} onChange={e => setEnd(e.target.value)} />
-        </div>
-        <div>
-          <label>Minutter</label>
-          <input type="number" min={0} step={5} value={minutes} onChange={e => setMinutes(e.target.value)} placeholder="Auto" />
-        </div>
-        <div style={{ display: "flex", alignItems: "flex-end" }}>
-          <button className="btn btn-accent"
-            onClick={() => onAdd({ date, project, activity, notes, start, end, minutes: minutes ? Number(minutes) : 0 })}>
-            Legg til
-          </button>
+        <div className="field-row">
+          <div>
+            <label>Minutter</label>
+            <input type="number" min={0} step={5} value={minutes} onChange={e => setMinutes(e.target.value)} placeholder="Beregnes auto" />
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button className="btn btn-accent btn-full" onClick={handleAdd}>Legg til</button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── TableEditable ─────────────────────────────────────────────────────── */
-function TableEditable({ entries, projects, totals, onUpdate, onDelete }: {
-  entries: Entry[];
-  projects: string[];
+/* ── Mobile List Tab ────────────────────────────────────────────────────── */
+function MobileListTab({ view, setView, filterDate, setFilterDate, filtered, totals, grandTotal, onDelete }: {
+  view: "day" | "week" | "all";
+  setView: (v: "day" | "week" | "all") => void;
+  filterDate: string;
+  setFilterDate: (d: string) => void;
+  filtered: Entry[];
   totals: Record<string, number>;
+  grandTotal: number;
+  onDelete: (id: string) => void;
+}) {
+  const byDate = useMemo(() => {
+    const map = new Map<string, Entry[]>();
+    for (const e of filtered) { const arr = map.get(e.date) ?? []; arr.push(e); map.set(e.date, arr); }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [filtered]);
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <div style={{ flex: 1 }}>
+          <label>Visning</label>
+          <select value={view} onChange={e => setView(e.target.value as any)}>
+            <option value="day">Dag</option>
+            <option value="week">Uke</option>
+            <option value="all">Alle</option>
+          </select>
+        </div>
+        {view !== "all" && (
+          <div style={{ flex: 1 }}>
+            <label>Dato</label>
+            <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+          </div>
+        )}
+        <div className="summary-chip" style={{ flexShrink: 0 }}>
+          <div className="val">{formatHM(grandTotal)}</div>
+          <div className="lbl">Totalt</div>
+        </div>
+      </div>
+
+      {/* Entry cards grouped by date */}
+      {byDate.length === 0 && (
+        <div className="card" style={{ textAlign: "center", color: "var(--muted)", padding: "32px 0" }}>
+          Ingen registreringer for valgt periode.
+        </div>
+      )}
+      {byDate.map(([date, dayEntries]) => (
+        <div key={date}>
+          {/* Date header with day total */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, padding: "0 2px" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {formatDateNO(date)}
+            </span>
+            {dayEntries.length > 1 && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)" }}>
+                {formatHM(totals[date] ?? 0)}
+              </span>
+            )}
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {dayEntries.map(e => (
+              <div key={e.id} className="entry-card">
+                <div className="entry-card-main">
+                  <div className="entry-card-project">{e.project}</div>
+                  <div className="entry-card-meta">
+                    {[e.activity, e.start && e.end ? `${e.start}–${e.end}` : null, e.notes]
+                      .filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <div className="entry-card-time">{formatHM(e.minutes)}</div>
+                <button className="entry-card-delete" onClick={() => onDelete(e.id)}>✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── FilterAndTable (desktop) ───────────────────────────────────────────── */
+function FilterAndTable({ view, setView, filterDate, setFilterDate, filtered, totals, grandTotal, projects, onUpdate, onDelete }: {
+  view: "day" | "week" | "all"; setView: (v: any) => void;
+  filterDate: string; setFilterDate: (d: string) => void;
+  filtered: Entry[]; totals: Record<string, number>; grandTotal: number;
+  projects: string[];
   onUpdate: (id: string, patch: Partial<Entry>) => void;
   onDelete: (id: string) => void;
 }) {
   const byDate = useMemo(() => {
     const map = new Map<string, Entry[]>();
-    for (const e of entries) { const arr = map.get(e.date) ?? []; arr.push(e); map.set(e.date, arr); }
+    for (const e of filtered) { const arr = map.get(e.date) ?? []; arr.push(e); map.set(e.date, arr); }
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [entries]);
+  }, [filtered]);
 
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table>
-        <thead>
-          <tr>
-            <th>Dato</th><th>Arbeidssted</th><th>Ordrenr</th><th>Notater</th>
-            <th>Start</th><th>Slutt</th>
-            <th className="right">Min</th><th className="right">Timer</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {byDate.map(([date, dayEntries]) => (
-            <React.Fragment key={date}>
-              {dayEntries.map(e => (
-                <tr key={e.id}>
-                  <td><input type="date" value={e.date} onChange={ev => onUpdate(e.id, { date: ev.target.value })} style={{ width: 130 }} /></td>
-                  <td>
-                    <input type="text" value={e.project} onChange={ev => onUpdate(e.id, { project: ev.target.value })} list="table-projects" style={{ width: 130 }} />
-                    <datalist id="table-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
-                  </td>
-                  <td><input type="text" value={e.activity || ""} onChange={ev => onUpdate(e.id, { activity: ev.target.value })} style={{ width: 100 }} /></td>
-                  <td><input type="text" value={e.notes || ""} onChange={ev => onUpdate(e.id, { notes: ev.target.value })} style={{ width: 200 }} /></td>
-                  <td>
-                    <input type="time" value={e.start || ""} style={{ width: 90 }}
-                      onChange={ev => { const s = ev.target.value; const m = s && e.end ? diffMinutes(s, e.end) : e.minutes; onUpdate(e.id, { start: s, minutes: m }); }} />
-                  </td>
-                  <td>
-                    <input type="time" value={e.end || ""} style={{ width: 90 }}
-                      onChange={ev => { const en = ev.target.value; const m = e.start && en ? diffMinutes(e.start, en) : e.minutes; onUpdate(e.id, { end: en, minutes: m }); }} />
-                  </td>
-                  <td className="right">
-                    <input type="number" value={e.minutes} min={0} step={5} style={{ width: 70, textAlign: "right" }}
-                      onChange={ev => onUpdate(e.id, { minutes: Number(ev.target.value) })} />
-                  </td>
-                  <td className="right mono muted">{(e.minutes / 60).toFixed(2)}</td>
-                  <td className="right">
-                    <button className="btn btn-danger" style={{ padding: "3px 9px", fontSize: 11 }} onClick={() => onDelete(e.id)}>Slett</button>
-                  </td>
-                </tr>
-              ))}
-              {dayEntries.length > 1 && (
-                <tr className="dagssum">
-                  <td>{date}</td>
-                  <td colSpan={5} style={{ color: "var(--muted)", fontStyle: "italic" }}>Dagssum</td>
-                  <td className="right">{totals[date] ?? 0}</td>
-                  <td className="right">{((totals[date] ?? 0) / 60).toFixed(2)}</td>
-                  <td></td>
-                </tr>
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+    <div className="card">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div><label>Visning</label><select value={view} onChange={e => setView(e.target.value)} style={{ width: 100 }}><option value="day">Dag</option><option value="week">Uke</option><option value="all">Alle</option></select></div>
+          {view !== "all" && <div><label>Dato</label><input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} style={{ width: 150 }} /></div>}
+        </div>
+        <div style={{ marginLeft: "auto" }}>
+          <div className="summary-chip"><div className="val">{formatHM(grandTotal)}</div><div className="lbl">Totalt</div></div>
+        </div>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table>
+          <thead>
+            <tr>
+              <th>Dato</th><th>Arbeidssted</th><th>Ordrenr</th><th>Notater</th>
+              <th>Start</th><th>Slutt</th><th className="right">Min</th><th className="right">Timer</th><th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {byDate.map(([date, dayEntries]) => (
+              <React.Fragment key={date}>
+                {dayEntries.map(e => (
+                  <tr key={e.id}>
+                    <td><input type="date" value={e.date} onChange={ev => onUpdate(e.id, { date: ev.target.value })} style={{ width: 130 }} /></td>
+                    <td>
+                      <input type="text" value={e.project} onChange={ev => onUpdate(e.id, { project: ev.target.value })} list="table-projects" style={{ width: 130 }} />
+                      <datalist id="table-projects">{projects.map(p => <option value={p} key={p} />)}</datalist>
+                    </td>
+                    <td><input type="text" value={e.activity || ""} onChange={ev => onUpdate(e.id, { activity: ev.target.value })} style={{ width: 100 }} /></td>
+                    <td><input type="text" value={e.notes || ""} onChange={ev => onUpdate(e.id, { notes: ev.target.value })} style={{ width: 180 }} /></td>
+                    <td><input type="time" value={e.start || ""} style={{ width: 88 }} onChange={ev => { const s = ev.target.value; const m = s && e.end ? diffMinutes(s, e.end) : e.minutes; onUpdate(e.id, { start: s, minutes: m }); }} /></td>
+                    <td><input type="time" value={e.end || ""} style={{ width: 88 }} onChange={ev => { const en = ev.target.value; const m = e.start && en ? diffMinutes(e.start, en) : e.minutes; onUpdate(e.id, { end: en, minutes: m }); }} /></td>
+                    <td className="right"><input type="number" value={e.minutes} min={0} step={5} style={{ width: 64, textAlign: "right" }} onChange={ev => onUpdate(e.id, { minutes: Number(ev.target.value) })} /></td>
+                    <td className="right mono muted">{(e.minutes / 60).toFixed(2)}</td>
+                    <td className="right"><button className="btn btn-danger" style={{ padding: "0 8px", height: 28, fontSize: 11 }} onClick={() => onDelete(e.id)}>Slett</button></td>
+                  </tr>
+                ))}
+                {dayEntries.length > 1 && (
+                  <tr className="dagssum">
+                    <td>{date}</td><td colSpan={5} style={{ color: "var(--muted)", fontStyle: "italic" }}>Dagssum</td>
+                    <td className="right">{totals[date] ?? 0}</td><td className="right">{((totals[date] ?? 0) / 60).toFixed(2)}</td><td></td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && <p style={{ textAlign: "center", color: "var(--muted)", padding: "28px 0" }}>Ingen registreringer for valgt periode.</p>}
+      </div>
     </div>
   );
 }
 
-/* ─── AdminPanel ────────────────────────────────────────────────────────── */
+/* ── AdminPanel ─────────────────────────────────────────────────────────── */
 function AdminPanel({ entries }: { entries: Entry[] }) {
   const grouped = useMemo(() => {
     const map = new Map<string, number>();
@@ -732,20 +1107,17 @@ function AdminPanel({ entries }: { entries: Entry[] }) {
             <div className="summary-chip" key={uid}>
               <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4, fontFamily: "var(--font-mono)" }}>{shortId(uid)}</div>
               <div className="val">{formatHM(mins)}</div>
-              <div className="lbl">{(mins / 60).toFixed(1)} timer</div>
+              <div className="lbl">{(mins / 60).toFixed(1)} t</div>
             </div>
           ))}
+          {perUser.size === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>Ingen data</p>}
         </div>
       </div>
       <div className="card">
         <div className="card-title">Pr. uke / ansatt</div>
         <div style={{ overflowX: "auto" }}>
           <table>
-            <thead>
-              <tr>
-                <th>Ansatt</th><th>Uke</th><th className="right">Timer</th><th className="right">Min</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Ansatt</th><th>Uke</th><th className="right">Timer</th><th className="right">Min</th></tr></thead>
             <tbody>
               {grouped.map((r, i) => (
                 <tr key={i}>
@@ -755,7 +1127,7 @@ function AdminPanel({ entries }: { entries: Entry[] }) {
                   <td className="right mono muted">{r.minutes}</td>
                 </tr>
               ))}
-              {grouped.length === 0 && <tr><td colSpan={4} style={{ textAlign: "center", color: "var(--muted)", padding: "24px 0" }}>Ingen data</td></tr>}
+              {grouped.length === 0 && <tr><td colSpan={4} style={{ textAlign: "center", color: "var(--muted)", padding: "20px 0" }}>Ingen data</td></tr>}
             </tbody>
           </table>
         </div>
@@ -764,7 +1136,7 @@ function AdminPanel({ entries }: { entries: Entry[] }) {
   );
 }
 
-/* ─── ImportBox ─────────────────────────────────────────────────────────── */
+/* ── ImportBox ──────────────────────────────────────────────────────────── */
 function ImportBox({ onImported }: { onImported: () => void }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
@@ -816,19 +1188,17 @@ function ImportBox({ onImported }: { onImported: () => void }) {
   return (
     <div className="card">
       <div className="card-title">↑ Importer CSV/XLSX</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} disabled={busy} style={{ width: "auto" }} />
-        {busy
-          ? <span className="muted pulse" style={{ fontSize: 12 }}>Importerer…</span>
-          : info && <span style={{ fontSize: 12, color: isError ? "var(--danger)" : "var(--accent2)" }}>{info}</span>
-        }
+        {busy ? <span className="muted pulse" style={{ fontSize: 12 }}>Importerer…</span>
+          : info && <span style={{ fontSize: 12, color: isError ? "var(--danger)" : "var(--accent2)" }}>{info}</span>}
       </div>
       <p style={{ marginTop: 8, fontSize: 11, color: "var(--muted)" }}>Kolonner: Dato, Arbeidssted, Ordrenr, Notater, Start, Slutt, Minutter.</p>
     </div>
   );
 }
 
-/* ─── Helpers ───────────────────────────────────────────────────────────── */
+/* ── Helpers ────────────────────────────────────────────────────────────── */
 function getISOWeek(dateISO: string) {
   const d = new Date(dateISO);
   const target = new Date(d.valueOf());
@@ -886,7 +1256,7 @@ function useElapsed(startTs: number | null) {
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [startTs]);
-  return elapsed; // millisekunder
+  return elapsed;
 }
 
 function useInterval(delay: number | null) {
@@ -917,6 +1287,12 @@ function formatHM(mins: number) {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function formatDateNO(iso: string) {
+  const [y, m, d] = iso.split("-");
+  const months = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
+  return `${Number(d)}. ${months[Number(m) - 1]} ${y}`;
 }
 
 function loadEntries(): Entry[] {
